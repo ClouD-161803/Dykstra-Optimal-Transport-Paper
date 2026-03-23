@@ -1,0 +1,60 @@
+\section{Small numerical example}
+\label{sec:example}
+
+To instantiate the proposed methodology and demonstrate the origin of the stalling geometry, we define a concrete, two-dimensional scenario heavily motivated by the initial orbit determination problem in aerospace engineering. In such nonlinear dynamical systems, initial Gaussian uncertainties propagating through orbital mechanics rapidly deform into highly non-Gaussian geometries, commonly referred to as ``crescent'' distributions. 
+
+\subsection{Target distribution generation}
+
+We begin by generating a source ensemble of $M$ unperturbed particles from a standard bivariate normal distribution, denoted ${\zeta}^{(i)} \sim \mathcal{N}({0}, {I}_2)$. To simulate the nonlinear orbital shearing effect, we apply a deterministic mapping to generate our target crescent-shaped dataset ${z}^{(i)}$:
+\begin{align*}
+    z_1^{(i)} &= \zeta_1^{(i)}, \\
+    z_2^{(i)} &= \zeta_2^{(i)} + \left(\zeta_1^{(i)}\right)^2.
+\end{align*}
+The fundamental task of our KR optimal transport map ${S}({z})$ is to invert this nonlinear distortion, thereby returning the highly coupled crescent empirical distribution back to a perfectly independent standard normal form.
+
+\subsection{Formulating the one-dimensional map component}
+
+Let us focus explicitly on computing the first component of the triangular map, $S^1(z_1)$, which depends solely on the first spatial coordinate. We truncate our parameterisation at a maximum Hermite polynomial degree of $D=3$. Consequently, our parameterised map is defined as:
+\begin{equation*}
+    S^1(z_1) = w_0 \text{He}_0(z_1) + w_1 \text{He}_1(z_1) + w_2 \text{He}_2(z_1) + w_3 \text{He}_3(z_1).
+\end{equation*}
+Substituting the explicit algebraic forms of the probabilist's Hermite polynomials, we obtain the expression:
+\begin{equation*}
+    S^1(z_1) = w_0(1) + w_1(z_1) + w_2(z_1^2 - 1) + w_3(z_1^3 - 3z_1).
+\end{equation*}
+By applying the derivative property from equation \eqref{eq:hermite_derivative}, the derivative of the map with respect to $z_1$ is trivially derived as:
+\begin{equation*}
+    \partial_1 S^1(z_1) = w_1(1) + 2 w_2 (z_1) + 3 w_3 (z_1^2 - 1).
+\end{equation*}
+
+\subsection{Constructing the one-dimensional constraint matrix}
+
+To enforce the KR monotonicity condition across the entire ensemble, we require that $\partial_1 S^1(z_1^{(i)}) \ge \varepsilon$ holds for every particle index $i$. For a single, specific particle located at coordinate $z_1^{(i)}$, this constraint evaluates algebraically to the linear inequality:
+\begin{equation*}
+    0 \cdot w_0 + 1 \cdot w_1 + 2z_1^{(i)} \cdot w_2 + 3\left((z_1^{(i)})^2 - 1\right) \cdot w_3 \ge \varepsilon.
+\end{equation*}
+This inequality dictates a single row of our constraint matrix ${A}$. Therefore, the $i$-th row ${A}_{i,:}$ is given by the vector:
+\begin{equation*}
+    {A}_{i,:} = \left[ 0, \quad 1, \quad 2z_1^{(i)}, \quad 3\left((z_1^{(i)})^2 - 1\right) \right].
+\end{equation*}
+
+\subsection{Formulating the two-dimensional map component}
+
+Having Gaussianised the first coordinate, we now extend our formulation to the second component of the triangular map, $S^2(z_1, z_2)$, which depends on both spatial coordinates. We approximate this component using a tensor product of our probabilist's Hermite polynomials up to a maximum degree $D$. The parameterised map is defined as the bivariate expansion:
+\begin{equation*}
+    S^2(z_1, z_2) = \sum_{j=0}^D \sum_{k=0}^D w_{j,k} \text{He}_j(z_1) \text{He}_k(z_2),
+\end{equation*}
+where $w_{j,k}$ are the scalar coefficients to be optimised. 
+
+The KR monotonicity condition dictates that this second component must be strictly increasing with respect to its second argument. Consequently, we must ensure that $\partial_2 S^2(z_1, z_2) \ge \varepsilon$. By exploiting the derivative property of the Hermite polynomials specifically along the $z_2$ dimension, the partial derivative simplifies analytically to:
+\begin{equation*}
+    \partial_2 S^2(z_1, z_2) = \sum_{j=0}^D \sum_{k=1}^D w_{j,k} \text{He}_j(z_1) \left( k \text{He}_{k-1}(z_2) \right).
+\end{equation*}
+
+\subsection{Constructing the two-dimensional constraint matrix}
+
+To enforce the monotonicity condition across the entire continuous cloud, we evaluate the partial derivative at every empirical particle $i$. For a specific particle located at $(z_1^{(i)}, z_2^{(i)})$, the constraint reduces to the linear inequality:
+\begin{equation*}
+    \sum_{j=0}^D \sum_{k=1}^D w_{j,k} \text{He}_j(z_1^{(i)}) \left( k \text{He}_{k-1}(z_2^{(i)}) \right) \ge \varepsilon.
+\end{equation*}
+By computing the constant terms $\text{He}_j(z_1^{(i)}) (k \text{He}_{k-1}(z_2^{(i)}))$ for all combinations of indices $j$ and $k$, we construct the $i$-th row of our expanded constraint matrix ${A}$ for the two-dimensional problem.

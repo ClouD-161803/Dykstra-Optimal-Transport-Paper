@@ -1,0 +1,89 @@
+\section{Optimal transport via Knothe-Rosenblatt maps}
+\label{sec:core}
+
+% In this section, we construct the optimal transport problem.
+
+\subsection{Notation and problem statement}
+
+Let $\mathcal{X} \subseteq \mathbb{R}^n$ denote a continuous state space. We consider a discrete ensemble of $M$ samples, or particles, denoted by $\{z^{(1)}, \dots, z^{(M)}\} \subset \mathcal{X}$, drawn from a (possibly intractable) non-Gaussian target probability distribution. Our overarching objective is to identify a deterministic coupling, specifically a transport map $S: \mathbb{R}^n \rightarrow \mathbb{R}^n$, that pushes the complex target distribution forward to a simple, analytically tractable reference distribution. In this work, the reference measure is fixed as the standard multivariate normal distribution, $\mathcal{N}(0, I_n)$.
+
+We restrict our hypothesis space to the Knothe-Rosenblatt (KR) rearrangement. The KR map is strictly defined by two structural properties: it is lower-triangular, and it is strictly monotone. Let the map be partitioned into its scalar components as
+\[S(z) = [S^1(z_1), S^2(z_1, z_2), \dots, S^n(z_1, \dots, z_n)]^T.\]
+The strict monotonicity constraint dictates that each individual component $S^k$ must be a strictly increasing function with respect to its own $k$-th argument. Using $\partial_k$ to denote the partial derivative with respect to the $k$-th variable, we require:
+\begin{equation}
+    \partial_k S^k(z) > 0 \quad \forall k \in \{1, \dots, n\}.
+    \label{eq:monotonicity_continuous}
+\end{equation}
+
+\subsection{Maximum likelihood estimation}
+
+Because the chosen reference distribution is a standard normal, its $n$ components are mutually independent. This allows us to decouple the otherwise computationally intensive high-dimensional optimisation problem into $n$ independent scalar estimation problems. Following the framework established in~\cite{Baptista2022}, for any given $k$-th component of the map, $S^k$, the maximum likelihood estimator is obtained by minimising the negative log-likelihood evaluated over the empirical sample points:
+\begin{equation}
+    \min_{S^k \in \mathcal{H}_k} \frac{1}{M} \sum_{i=1}^M \left( \frac{1}{2} S^k(z^{(i)})^2 - \log \partial_k S^k(z^{(i)}) \right).
+    \label{eq:mle_objective}
+\end{equation}
+Here, $\mathcal{H}_k$ represents the hypothesis space of all functions that satisfy the strict monotonicity constraint defined in \eqref{eq:monotonicity_continuous}. The objective function balances two simultaneous demands: the quadratic term encourages the mapped particles to adopt the unit variance of the standard normal reference, whilst the logarithmic term severely penalises maps that compress the probability space towards zero, thereby preventing the formation of singular transformations.
+
+\subsection{Hermite polynomial parameterisation}
+
+To solve the optimisation problem in \eqref{eq:mle_objective} computationally, we must project the infinite-dimensional functional space $\mathcal{H}_k$ onto a finite-dimensional basis. Given that our likelihood function is assumed to be broadly Gaussian, it is natural to parameterise the map component $S^k$ using a truncated series of Hermite polynomials\footnote{Utilising standard monomials (i.e., $1, x, x^2, \dots$) to expand the map would yield highly ill-conditioned systems when evaluating expectations against a Gaussian measure, severely impairing gradient-based solvers. Hermite polynomials are instead orthogonal with respect to the standard normal weight, guaranteeing numerical stability and smoothing the optimisation landscape.}. We define the sequence of Hermite polynomials, $\text{He}_j(x)$, via the recurrence relation:
+\begin{align*}
+    \text{He}_0(x) &= 1, \\
+    \text{He}_1(x) &= x, \\
+    \text{He}_{j+1}(x) &= x \text{He}_j(x) - j \text{He}_{j-1}(x).
+\end{align*}
+We approximate the $k$-th map component using a linear basis expansion up to a maximum polynomial degree $D$:
+\begin{equation}
+    S^k(z) = \sum_{j=0}^D w_j^{(k)} \Psi_j(z),
+    \label{eq:hermite_expansion}
+\end{equation}
+where $\Psi_j$ are multivariate basis functions constructed from tensor products of the univariate Hermite polynomials, and the vector $w^{(k)} = [w_0^{(k)}, \dots, w_D^{(k)}]^T \in \mathbb{R}^{D+1}$ represents the unknown decision variables we must optimise. A computationally advantageous property of this parameterisation emerges when evaluating the monotonicity constraint. The derivative of a probabilist's Hermite polynomial obeys the relation:
+\begin{equation}
+    \frac{d}{dx} \text{He}_j(x) = j \text{He}_{j-1}(x).
+    \label{eq:hermite_derivative}
+\end{equation}
+Consequently, the partial derivative of the map component $\partial_k S^k(z)$ reduces to a simple linear combination of lower-degree Hermite polynomials. 
+
+\subsection{Polyhedral constraints and projected gradient descent}
+
+By substituting the polynomial expansion \eqref{eq:hermite_expansion} directly into the negative log-likelihood \eqref{eq:mle_objective}, the objective function, which we shall denote $f(w^{(k)})$, becomes strictly convex with respect to the coefficient vector $w^{(k)}$. We must now formally impose the monotonicity constraint $\partial_k S^k(z) > 0$. To ensure numerical stability and strictly avoid ``folding'' the probability mass, we introduce a small positive tolerance $\varepsilon > 0$ and enforce the constraint over the empirical discrete ensemble:
+\begin{equation}
+    \sum_{j=0}^D w_j^{(k)} \partial_k \Psi_j(z^{(i)}) \ge \epsilon \quad \forall i \in \{1, \dots, M\}.
+    \label{eq:discrete_monotonicity}
+\end{equation}
+Exploiting the linearity of the derivative operator shown in \eqref{eq:hermite_derivative}, the condition in \eqref{eq:discrete_monotonicity} constitutes a set of purely linear inequality constraints on the decision variables $w^{(k)}$. By evaluating these basis derivatives at every particle $z^{(i)}$ and stacking the results, we construct a dense constraint matrix $A \in \mathbb{R}^{M \times (D+1)}$, which defines the feasible polyhedral set:
+\begin{equation*}
+    \mathcal{C} = \{ w \in \mathbb{R}^{D+1} \mid -Aw \le -\epsilon \},
+\end{equation*}
+where $\epsilon \in \mathbb{R}^M$ is a vector with all entries equal to $\varepsilon$. The domain $\mathcal{C}$ is constituted by the intersection of $M$ distinct half-spaces.
+
+To minimise the nonlinear convex objective $f(w)$ subject to the restriction $w \in \mathcal{C}$, we employ an iterative Projected Gradient Descent (PGD) scheme. At iteration $t$, we compute the gradient $\nabla f(w_t)$ and take a descent step parameterised by a step size $\alpha$, yielding an intermediate unconstrained point $\tilde{w}$:
+\begin{equation*}
+    \tilde{w} = w_t - \alpha \nabla f(w_t).
+\end{equation*}
+Because the unconstrained step $\tilde{w}$ will frequently violate the monotonicity conditions (i.e., $\tilde{w} \notin \mathcal{C}$), we must project it back onto the feasible intersection of half-spaces. This projection operation is equivalent to solving the constrained quadratic program (CQP):
+\begin{equation}\label{eq:cqp_projection}
+\begin{array}{ll}
+    \displaystyle \minimise_{w \in \mathbb{R}^{D+1}} & \frac{1}{2}\|w - \tilde{w}\|_2^2 \\
+    \text{subject to} & -Aw \le -\epsilon
+\end{array}
+\end{equation}
+
+We implement Dykstra's algorithm to solve this Euclidean projection step \eqref{eq:cqp_projection}.
+% Because the particles $z^{(i)}$ form a dense, continuous cloud in the state space, the rows of $A$ corresponding to spatially adjacent particles are highly correlated. Geometrically, this results in constraint hyperplanes that intersect at remarkably acute angles. Standard alternating projection algorithms, including the vanilla implementation of Dykstra's method, inevitably succumb to catastrophic stalling when navigating these sharp polyhedral corners.
+By applying the closed-form stalling duration and fast-forwarding technique detailed in~\cite{Vestini2025}, we fast-forward through any stalling cycles, obtaining the exact Euclidean projection $w_{t+1}$ with high efficiency. The overarching structure of the solver is detailed in Algorithm \ref{alg:pgd_dykstra}.
+
+\begin{algorithm}
+\caption{Projected Gradient Descent with Fast-Forward Dykstra}\label{alg:pgd_dykstra}
+\begin{algorithmic}[1]
+\State \textbf{Input:} Initial guess $w_0 \in \mathcal{C}$, step size $\alpha$, constraint matrix $A$, tolerance vector $\epsilon$
+\State $t \gets 0$
+\While{convergence criteria not met}
+    \State Compute the gradient vector $\nabla f(w_t)$
+    \State $\tilde{w} \gets w_t - \alpha \nabla f(w_t)$ \Comment{Compute the unconstrained gradient descent step}
+    \State $w_{t+1} \gets \text{FastForwardDykstra}(\tilde{w}, -A, -\epsilon)$ \Comment{Projection step from~\cite{Vestini2025}}
+    \State $t \gets t + 1$
+\EndWhile
+\State \textbf{Output:} Optimal map coefficients $w^* = w_t$
+\end{algorithmic}
+\end{algorithm}
