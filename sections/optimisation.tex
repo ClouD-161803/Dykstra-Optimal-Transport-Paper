@@ -1,0 +1,28 @@
+\section{Computational optimisation}
+\label{sec:optimisation}
+
+The baseline PGD scheme outlined in Algorithm~\ref{alg:pgd_dykstra} provides rigorous convergence guarantees. However, calculating an exact Euclidean projection onto the polyhedral feasible set $\mathcal{C}$ at every outer iteration $t$ is computationally wasteful, particularly when the primal iterate $w_t$ is far from the optimal solution $w^*$. 
+
+\subsection{Inexact projection schedule}
+
+To significantly accelerate the descent, we implement an inexact projection schedule. Rather than iterating the inner Dykstra solver to a strict error tolerance, we dynamically scale the maximum allowable inner cycles, $K_t$, according to a polynomial growth schedule:
+$$K_t = \lfloor K_{\text{base}} t^p \rfloor,$$
+where $K_{\text{base}}$ is the base iteration budget and $p \ge 0$ is the inexact power parameter. During the highly transient early phases of gradient descent, this schedule enforces a cheap, approximate projection. As the outer iterations progress and the parameter vector approaches the optimal map coefficients, the budget expands exponentially, driving the constraints toward exact satisfaction.
+
+\subsection{Stochastic gradient descent and learning rate}
+
+Evaluating the full gradient $\nabla f(w^{(k)})$ requires computing the objective over the entire dense ensemble of $M$ particles. For high-dimensional aerospace applications involving massive particle clouds, this full-batch gradient evaluation rapidly becomes a computational bottleneck.
+
+To scale the estimation of the KR map, we employ SGD via mini-batching. At each outer iteration $t$, we sample a uniform mini-batch of particles $\mathcal{B}_t \subset \{1, \dots, M\}$ of size $B = |\mathcal{B}_t| \ll M$. The stochastic gradient $\nabla \hat{f}(w_t)$ is subsequently estimated exclusively over $\mathcal{B}_t$. 
+
+To ensure convergence in the presence of stochastic noise and to successfully navigate flat ravines in the optimisation landscape, we couple the SGD scheme with a dynamic learning rate decay:
+$$\alpha_t = \frac{\alpha_0}{1 + \gamma t},$$
+where $\alpha_0$ is the initial learning rate and $\gamma$ governs the decay rate. Crucially, whilst the unconstrained gradient step evaluates only the mini-batch $\mathcal{B}_t$, the polyhedral monotonicity constraints $-Aw \le -\epsilon$ are strictly enforced over the full ensemble $M$ during the inner Dykstra projection step. This hybrid approach ensures computational efficiency without sacrificing the global structural validity of the strictly monotone map.
+
+\subsection{Structural sparsity and iterative hard thresholding}
+
+A fundamental limitation of high-dimensional polynomial parameterisation is the combinatorial explosion of the tensor product basis. A full tensor expansion up to degree $D$ in $n$ dimensions yields $(D+1)^n$ terms. To enforce mathematical sparsity a priori, we apply a total degree truncation, restricting the basis exclusively to polynomial combinations where the sum of their individual degrees does not exceed $D$.
+
+Furthermore, gradient-based solvers inherently accumulate tiny, non-physical weights (numerical ``fuzz'') that violate strict sparsity. To counter this, we introduce an $L_1$ regularisation penalty alongside an IHT operator into the PGD loop. After the gradient update, we apply a boolean masking operator $H_\tau(w)$ that explicitly zeroes out coefficients whose magnitude falls below a predefined threshold $\tau$:
+$$[H_\tau(w)]_j = \begin{cases} w_j, & \text{if } |w_j| \ge \tau \\ 0, & \text{otherwise} \end{cases}.$$
+This combination of a priori truncation and iterative thresholding isolates the dominant dynamical shear terms (such as the quadratic orbital shearing effect mapping $S^2(z_1, z_2) = z_2 - z_1^2$), ensuring the physical interpretability of the final KR parameterisation.
